@@ -56,7 +56,7 @@ def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileCl
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
-    frame_count = video.duration * NAIVE_FRAME_RATE
+    frame_count = round(video.duration * NAIVE_FRAME_RATE)
     return [
         convert_frame(frame) for frame in tqdm(video.iter_frames(), total=frame_count)
     ]
@@ -71,32 +71,37 @@ def play_frames(frames: list[str]) -> None:
         sleep(max(FRAME_TIME_S - print_time, 0))
 
 
-def play_audio(video: VideoFileClip, temp_file_name: str) -> Callable[[], None]:
+def play_audio(video: VideoFileClip) -> Callable[[], None]:
     audio = video.audio
-    assert audio  # TODO add support for video without audio
-    pygame.mixer.init()
-    temp_audio_path = temp_file_name
+    if not audio:
+        return lambda: None
+
+    temp_audio_path = "cli-video-temp-audio.mp3"
+    if os.path.exists(temp_audio_path):
+        raise FileExistsError("Temporary sound file already exists.")
     audio.write_audiofile(temp_audio_path)
+
+    pygame.mixer.init()
     pygame.mixer.music.load(temp_audio_path)
     pygame.mixer.music.play()
-    return pygame.mixer.music.unload
+
+    def cleanup() -> None:
+        pygame.mixer.music.unload()
+        os.remove(temp_audio_path)
+
+    return cleanup
 
 
 def play_video(path: str) -> None:
     video = load_video(path, frame_rate=NAIVE_FRAME_RATE, size=terminal_size())
     frames = create_frames(video)
-
-    temp_file_name = "cli-video-temp-audio.mp3"
-    if os.path.exists(temp_file_name):
-        raise FileExistsError("Temporary sound file already exists.")
     try:
         clear_terminal()
-        unload_audio = play_audio(video, temp_file_name)
+        cleanup = play_audio(video)
         play_frames(frames)
         clear_terminal()
     finally:
-        unload_audio()
-        os.remove(temp_file_name)
+        cleanup()
 
 
 def main() -> None:
