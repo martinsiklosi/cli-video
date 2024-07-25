@@ -1,3 +1,11 @@
+# Media files
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.mp3
+*.wav
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
