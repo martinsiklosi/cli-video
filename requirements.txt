@@ -1,2 +1,4 @@
 moviepy==1.0.3
 pygame==2.1.2
+tqdm==4.62.2
+numpy==1.20.3
