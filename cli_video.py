@@ -5,6 +5,7 @@ from typing import Tuple, Callable
 from moviepy.editor import VideoFileClip
 from moviepy.video.fx.all import resize  # type: ignore
 import pygame
+import numpy as np
 
 
 os.system("")  # For ANSI escape sequences to be processed correctly
@@ -28,21 +29,21 @@ def ansi_backround_rgb(rgb: Tuple[int, int, int]) -> str:
 
 
 def terminal_size() -> Tuple[int, int]:
-    """Returns (width, heigt) of terminal"""
-    height = os.get_terminal_size().lines - 1
+    """Returns (width, heigth) of terminal"""
+    height = os.get_terminal_size().lines
     width = os.get_terminal_size().columns // 2
     return width, height
 
 
-def convert_frame(frame) -> str:
+def convert_frame(frame: np.ndarray) -> str:
     output = ""
     for row in frame:
         for pixel in row:
             output += ansi_backround_rgb(pixel)
             output += "  "
+        output += ANSI_RESET
         output += "\n"
-    output += ANSI_RESET
-    return output
+    return output.strip()
 
 
 def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
@@ -59,7 +60,7 @@ def create_frames(video: VideoFileClip) -> list[str]:
 def play_frames(frames: list[str]) -> None:
     for frame in frames:
         before = time()
-        print(frame)
+        print(frame, end="")
         after = time()
         print_time = after - before
         sleep(max(FRAME_TIME_S - print_time, 0))
