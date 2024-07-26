@@ -1,4 +1,4 @@
-# A command-line in-terminal video player
+# A simple command-line in-terminal video player
 
 ## Install
 ```bash
