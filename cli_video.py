@@ -1,5 +1,6 @@
 import os
 import sys
+import multiprocessing as mp
 from time import time, sleep
 from typing import Tuple, Callable
 
@@ -21,6 +22,7 @@ ANSI_SHOW_CURSOR = "\033[?25h"
 
 
 Rgb = Tuple[int, int, int]
+RawFrame = list[list[Rgb]]
 
 
 def clear_terminal() -> None:
@@ -40,9 +42,9 @@ def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_frame(frame: list[list[Rgb]]) -> str:
+def convert_raw_frame(raw_frame: RawFrame) -> str:
     output = [ANSI_RESET_CURSOR]
-    for row in frame:
+    for row in raw_frame:
         output.append("\n")
         for pixel in row:
             output.append(ansi_backround_rgb(pixel) + "  ")
@@ -50,33 +52,30 @@ def convert_frame(frame: list[list[Rgb]]) -> str:
     return "".join(output)
 
 
+def convert_raw_frames_in_parallel(frames: list[RawFrame]) -> list[str]:
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        return list(tqdm(pool.imap(convert_raw_frame, frames), total=len(frames)))
+
+
 def create_frames(video: VideoFileClip) -> list[str]:
     frame_count = round(video.duration * FRAME_RATE)
     print("Loading frames")
     frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
     print("Processing frames")
-    return [convert_frame(frame) for frame in tqdm(frames)]
+    return convert_raw_frames_in_parallel(frames)
 
 
-def play_frames(frames: list[str]) -> Callable[[], None]:
-    print(ANSI_HIDE_CURSOR)
-
+def play_frames(frames: list[str]) -> None:
     start_time = time()
     for i, frame in enumerate(frames):
         elapsed_time = time() - start_time
         theoretical_elapsed_time = i / FRAME_RATE
         correction = theoretical_elapsed_time - elapsed_time
-        if abs(correction) > FRAME_TIME_S and i % FRAME_RATE != 0:
+        if abs(correction) > FRAME_TIME_S:
             continue
-
         print(frame, end="")
         sleep_time = FRAME_TIME_S + correction
         sleep(max(sleep_time, 0))
-
-    def cleanup() -> None:
-        print(ANSI_SHOW_CURSOR, end="")
-
-    return cleanup
 
 
 def play_audio(video: VideoFileClip) -> Callable[[], None]:
@@ -110,16 +109,17 @@ def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileCl
 
 
 def play_video(path: str) -> None:
+    print(ANSI_HIDE_CURSOR, end="")
     video = load_video(path, frame_rate=FRAME_RATE, size=terminal_size())
     frames = create_frames(video)
     try:
         audio_cleanup = play_audio(video)
         clear_terminal()
-        frames_cleanup = play_frames(frames)
+        play_frames(frames)
         clear_terminal()
     finally:
+        print(ANSI_SHOW_CURSOR, end="")
         audio_cleanup()
-        frames_cleanup()
         video.close()
 
 
