@@ -24,16 +24,14 @@ def clear_terminal() -> None:
         os.system("clear")
 
 
-def ansi_backround_rgb(rgb: Tuple[int, int, int]) -> str:
-    r, g, b = rgb
-    return f"\033[48;2;{r};{g};{b}m"
-
-
 def terminal_size() -> Tuple[int, int]:
-    """Returns (width, heigth) of terminal"""
     height = os.get_terminal_size().lines
     width = os.get_terminal_size().columns // 2
     return height, width
+
+
+def ansi_backround_rgb(rgb: Tuple[int, int, int]) -> str:
+    return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
 def convert_frame(frame: np.ndarray) -> str:
@@ -41,18 +39,9 @@ def convert_frame(frame: np.ndarray) -> str:
     for row in frame:
         output.append("\n")
         for pixel in row:
-            output.append(ansi_backround_rgb(pixel))
-            output.append("  ")
+            output.append(ansi_backround_rgb(pixel) + "  ")
         output.append(ANSI_RESET)
     return "".join(output)
-
-
-def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
-    video = VideoFileClip(
-        path, target_resolution=size, resize_algorithm="fast_bilinear"
-    )
-    video = video.set_fps(frame_rate)
-    return video
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
@@ -66,7 +55,7 @@ def create_frames(video: VideoFileClip) -> list[str]:
 def play_frames(frames: list[str]) -> None:
     for frame in frames:
         before = time()
-        print(frame, end="")
+        sys.stdout.write(frame)
         after = time()
         print_time = after - before
         sleep(max(FRAME_TIME_S - print_time, 0))
@@ -93,6 +82,14 @@ def play_audio(video: VideoFileClip) -> Callable[[], None]:
     return cleanup
 
 
+def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
+    video = VideoFileClip(
+        path, target_resolution=size, resize_algorithm="fast_bilinear"
+    )
+    video = video.set_fps(frame_rate)
+    return video
+
+
 def play_video(path: str) -> None:
     video = load_video(path, frame_rate=NAIVE_FRAME_RATE, size=terminal_size())
     frames = create_frames(video)
@@ -107,7 +104,6 @@ def play_video(path: str) -> None:
 
 
 def main() -> None:
-    # TODO choose framerate from cli (maybe with a --frame-rate)
     if len(sys.argv) != 2:
         print("USAGE: python cli_video.py <path>")
         return
