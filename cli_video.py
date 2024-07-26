@@ -5,16 +5,19 @@ from typing import Tuple, Callable
 
 from moviepy.editor import VideoFileClip
 from tqdm import tqdm
-import numpy as np
 import pygame
 
 
-os.system("")  # For ANSI escape sequences to be processed correctly
+# For ANSI escape sequences to be processed correctly on windows
+os.system("")
 
 
 FRAME_RATE = 12
 FRAME_TIME_S = 1 / FRAME_RATE
 ANSI_RESET = "\033[0m"
+
+
+Rgb = Tuple[int, int, int]
 
 
 def clear_terminal() -> None:
@@ -30,11 +33,11 @@ def terminal_size() -> Tuple[int, int]:
     return height, width
 
 
-def ansi_backround_rgb(rgb: Tuple[int, int, int]) -> str:
+def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_frame(frame: np.ndarray) -> str:
+def convert_frame(frame: list[list[Rgb]]) -> str:
     output = []
     for row in frame:
         output.append("\n")
