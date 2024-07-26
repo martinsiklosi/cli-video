@@ -1,9 +1,8 @@
 import os
 import sys
 from time import time, sleep
-from typing import Tuple, Callable, Optional
+from typing import Tuple, Callable
 
-from moviepy.video.fx.all import resize  # type: ignore
 from moviepy.editor import VideoFileClip
 from tqdm import tqdm
 import numpy as np
@@ -34,57 +33,34 @@ def terminal_size() -> Tuple[int, int]:
     """Returns (width, heigth) of terminal"""
     height = os.get_terminal_size().lines
     width = os.get_terminal_size().columns // 2
-    return width, height
+    return height, width
 
 
-def preprocess_text_for_frame(text: str, frame: np.ndarray) -> str:
-    text = text.replace("\n", " ")
-    length_needed = 2 * frame.shape[0] * frame.shape[1]
-    length_to_add = length_needed - len(text)
-    text = text + " " * length_to_add
-    return text
-
-
-def colors_differ(
-    color1: Optional[Tuple[int, int, int]],
-    color2: Optional[Tuple[int, int, int]],
-    tol: int,
-) -> bool:
-    if color1 is None or color2 is None:
-        return True
-    for c1, c2 in zip(color1, color2):
-        if abs(c1 - c2) > tol:
-            return True
-    return False
-
-
-def convert_frame(frame: np.ndarray, text: str = "") -> str:
-    text = preprocess_text_for_frame(text, frame=frame)
-    output = ""
-    last_pixel = None
+def convert_frame(frame: np.ndarray) -> str:
+    output = []
     for row in frame:
-        output += "\n"
+        output.append("\n")
         for pixel in row:
-            # if colors_differ(pixel, last_pixel, tol=10):
-            output += ansi_backround_rgb(pixel)
-            output += text[:2]
-            text = text[2:]
-        output += ANSI_RESET
-    return output
+            output.append(ansi_backround_rgb(pixel))
+            output.append("  ")
+        output.append(ANSI_RESET)
+    return "".join(output)
 
 
 def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
-    video = VideoFileClip(path)
+    video = VideoFileClip(
+        path, target_resolution=size, resize_algorithm="fast_bilinear"
+    )
     video = video.set_fps(frame_rate)
-    video = resize(video, newsize=size)
     return video
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
     frame_count = round(video.duration * NAIVE_FRAME_RATE)
-    return [
-        convert_frame(frame) for frame in tqdm(video.iter_frames(), total=frame_count)
-    ]
+    print("Loading frames")
+    frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
+    print("Processing frames")
+    return [convert_frame(frame) for frame in tqdm(frames)]
 
 
 def play_frames(frames: list[str]) -> None:
@@ -121,22 +97,20 @@ def play_video(path: str) -> None:
     video = load_video(path, frame_rate=NAIVE_FRAME_RATE, size=terminal_size())
     frames = create_frames(video)
     try:
+        audio_cleanup = play_audio(video)
         clear_terminal()
-        cleanup = play_audio(video)
         play_frames(frames)
         clear_terminal()
     finally:
-        cleanup()
+        audio_cleanup()
+        video.close()
 
 
 def main() -> None:
     # TODO choose framerate from cli (maybe with a --frame-rate)
-    # TODO add cool text
     if len(sys.argv) != 2:
         print("USAGE: python cli_video.py <path>")
         return
-
-    print("Loading video...")
     play_video(sys.argv[1])
 
 
