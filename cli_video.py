@@ -1,7 +1,7 @@
 import os
 import sys
 from time import time, sleep
-from typing import Tuple, Callable
+from typing import Tuple, Callable, Optional
 
 from moviepy.video.fx.all import resize  # type: ignore
 from moviepy.editor import VideoFileClip
@@ -37,15 +37,40 @@ def terminal_size() -> Tuple[int, int]:
     return width, height
 
 
-def convert_frame(frame: np.ndarray) -> str:
+def preprocess_text_for_frame(text: str, frame: np.ndarray) -> str:
+    text = text.replace("\n", " ")
+    length_needed = 2 * frame.shape[0] * frame.shape[1]
+    length_to_add = length_needed - len(text)
+    text = text + " " * length_to_add
+    return text
+
+
+def colors_differ(
+    color1: Optional[Tuple[int, int, int]],
+    color2: Optional[Tuple[int, int, int]],
+    tol: int,
+) -> bool:
+    if color1 is None or color2 is None:
+        return True
+    for c1, c2 in zip(color1, color2):
+        if abs(c1 - c2) > tol:
+            return True
+    return False
+
+
+def convert_frame(frame: np.ndarray, text: str = "") -> str:
+    text = preprocess_text_for_frame(text, frame=frame)
     output = ""
+    last_pixel = None
     for row in frame:
-        for pixel in row:
-            output += ansi_backround_rgb(pixel)
-            output += "  "
-        output += ANSI_RESET
         output += "\n"
-    return output.strip()
+        for pixel in row:
+            # if colors_differ(pixel, last_pixel, tol=10):
+            output += ansi_backround_rgb(pixel)
+            output += text[:2]
+            text = text[2:]
+        output += ANSI_RESET
+    return output
 
 
 def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
@@ -105,6 +130,8 @@ def play_video(path: str) -> None:
 
 
 def main() -> None:
+    # TODO choose framerate from cli (maybe with a --frame-rate)
+    # TODO add cool text
     if len(sys.argv) != 2:
         print("USAGE: python cli_video.py <path>")
         return
