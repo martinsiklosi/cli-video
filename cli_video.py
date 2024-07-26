@@ -13,8 +13,6 @@ import pygame
 os.system("")
 
 
-FRAME_RATE = 24
-FRAME_TIME_S = 1 / FRAME_RATE
 ANSI_RESET_STYLE = "\033[0m"
 ANSI_RESET_CURSOR = "\033[H"
 ANSI_HIDE_CURSOR = "\033[?25l"
@@ -58,23 +56,24 @@ def convert_raw_frames_in_parallel(frames: list[RawFrame]) -> list[str]:
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
-    frame_count = round(video.duration * FRAME_RATE)
+    frame_count = round(video.duration * video.fps)
     print("Loading frames")
     frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
     print("Processing frames")
     return convert_raw_frames_in_parallel(frames)
 
 
-def play_frames(frames: list[str]) -> None:
+def play_frames(frames: list[str], frame_rate: int) -> None:
+    frame_time_s = 1 / frame_rate
     start_time = time()
     for i, frame in enumerate(frames):
         elapsed_time = time() - start_time
-        theoretical_elapsed_time = i / FRAME_RATE
+        theoretical_elapsed_time = i / frame_rate
         correction = theoretical_elapsed_time - elapsed_time
-        if abs(correction) > FRAME_TIME_S:
+        if abs(correction) > frame_time_s:
             continue
         print(frame, end="")
-        sleep_time = FRAME_TIME_S + correction
+        sleep_time = frame_time_s + correction
         sleep(max(sleep_time, 0))
 
 
@@ -108,14 +107,14 @@ def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileCl
     return video
 
 
-def play_video(path: str) -> None:
+def play_video(path: str, frame_rate: int) -> None:
     print(ANSI_HIDE_CURSOR, end="")
-    video = load_video(path, frame_rate=FRAME_RATE, size=terminal_size())
+    video = load_video(path, frame_rate=frame_rate, size=terminal_size())
     frames = create_frames(video)
     try:
         audio_cleanup = play_audio(video)
         clear_terminal()
-        play_frames(frames)
+        play_frames(frames, frame_rate=frame_rate)
         clear_terminal()
     finally:
         print(ANSI_SHOW_CURSOR, end="")
@@ -124,10 +123,20 @@ def play_video(path: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2 or "--help" in sys.argv:
-        print("USAGE: python cli_video.py <path>")
+    if "--help" in sys.argv:
+        print("USAGE: python cli_video.py [path] [options]")
+        print()
+        print("OPTIONS:\n  --frame-rate")
         return
-    play_video(sys.argv[1])
+    
+    try:
+        i = sys.argv.index("--frame-rate")
+        sys.argv.pop(i)
+        frame_rate = int(sys.argv.pop(i))
+    except ValueError:
+        frame_rate = 24
+    
+    play_video(sys.argv[1], frame_rate=frame_rate)
 
 
 if __name__ == "__main__":
