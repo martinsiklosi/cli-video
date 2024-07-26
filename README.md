@@ -1,6 +1,12 @@
 # A command-line in-terminal video player
 
-Run with:
+## Install
+```bash
+pip install -r requirements.txt
+```
+
+## Run
+
 ```bash
 python cli_video.py /path/to/video
 ```
