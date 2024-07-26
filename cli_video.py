@@ -12,9 +12,12 @@ import pygame
 os.system("")
 
 
-FRAME_RATE = 12
+FRAME_RATE = 30
 FRAME_TIME_S = 1 / FRAME_RATE
-ANSI_RESET = "\033[0m"
+ANSI_RESET_STYLE = "\033[0m"
+ANSI_RESET_CURSOR = "\033[H"
+ANSI_HIDE_CURSOR = "\033[?25l"
+ANSI_SHOW_CURSOR = "\033[?25h"
 
 
 Rgb = Tuple[int, int, int]
@@ -28,7 +31,7 @@ def clear_terminal() -> None:
 
 
 def terminal_size() -> Tuple[int, int]:
-    height = os.get_terminal_size().lines
+    height = os.get_terminal_size().lines - 1
     width = os.get_terminal_size().columns // 2
     return height, width
 
@@ -38,12 +41,12 @@ def ansi_backround_rgb(rgb: Rgb) -> str:
 
 
 def convert_frame(frame: list[list[Rgb]]) -> str:
-    output = []
+    output = [ANSI_RESET_CURSOR]
     for row in frame:
         output.append("\n")
         for pixel in row:
             output.append(ansi_backround_rgb(pixel) + "  ")
-        output.append(ANSI_RESET)
+        output.append(ANSI_RESET_STYLE)
     return "".join(output)
 
 
@@ -55,20 +58,25 @@ def create_frames(video: VideoFileClip) -> list[str]:
     return [convert_frame(frame) for frame in tqdm(frames)]
 
 
-def play_frames(frames: list[str]) -> None:
+def play_frames(frames: list[str]) -> Callable[[], None]:
+    print(ANSI_HIDE_CURSOR)
+    
     start_time = time()
     for i, frame in enumerate(frames):
-        correction = 0
-        if i % FRAME_RATE:
-            elapsed_time = time() - start_time
-            theoretical_elapsed_time = i / FRAME_RATE
-            correction = theoretical_elapsed_time - elapsed_time
-        time_before_print = time()
+        elapsed_time = time() - start_time
+        theoretical_elapsed_time = i / FRAME_RATE
+        correction = theoretical_elapsed_time - elapsed_time
+        if abs(correction) > FRAME_TIME_S:
+            continue
+        
         print(frame, end="")
-        print_time = time() - time_before_print
-        sleep_time = FRAME_TIME_S - print_time + correction
+        sleep_time = FRAME_TIME_S + correction
         sleep(max(sleep_time, 0))
-
+    
+    def cleanup() -> None:
+        print(ANSI_SHOW_CURSOR)
+        
+    return cleanup
 
 def play_audio(video: VideoFileClip) -> Callable[[], None]:
     audio = video.audio
@@ -105,10 +113,11 @@ def play_video(path: str) -> None:
     try:
         audio_cleanup = play_audio(video)
         clear_terminal()
-        play_frames(frames)
+        frames_cleanup = play_frames(frames)
         clear_terminal()
     finally:
         audio_cleanup()
+        frames_cleanup()
         video.close()
 
 
