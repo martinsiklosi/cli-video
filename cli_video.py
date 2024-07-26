@@ -12,7 +12,7 @@ import pygame
 os.system("")
 
 
-FRAME_RATE = 30
+FRAME_RATE = 24
 FRAME_TIME_S = 1 / FRAME_RATE
 ANSI_RESET_STYLE = "\033[0m"
 ANSI_RESET_CURSOR = "\033[H"
@@ -60,30 +60,32 @@ def create_frames(video: VideoFileClip) -> list[str]:
 
 def play_frames(frames: list[str]) -> Callable[[], None]:
     print(ANSI_HIDE_CURSOR)
-    
+
     start_time = time()
     for i, frame in enumerate(frames):
         elapsed_time = time() - start_time
         theoretical_elapsed_time = i / FRAME_RATE
         correction = theoretical_elapsed_time - elapsed_time
-        if abs(correction) > FRAME_TIME_S:
+        if abs(correction) > FRAME_TIME_S and i % FRAME_RATE != 0:
             continue
-        
+
         print(frame, end="")
         sleep_time = FRAME_TIME_S + correction
         sleep(max(sleep_time, 0))
-    
+
     def cleanup() -> None:
-        print(ANSI_SHOW_CURSOR)
-        
+        print(ANSI_SHOW_CURSOR, end="")
+
     return cleanup
+
 
 def play_audio(video: VideoFileClip) -> Callable[[], None]:
     audio = video.audio
     if not audio:
         return lambda: None
 
-    temp_audio_path = "cli-video-temp-audio.mp3"
+    current_time_ms = 1000 * time()
+    temp_audio_path = f"cli-video-temp-{current_time_ms:.0f}.mp3"
     if os.path.exists(temp_audio_path):
         raise FileExistsError("Temporary sound file already exists.")
     audio.write_audiofile(temp_audio_path)
