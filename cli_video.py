@@ -110,7 +110,7 @@ def play_video(path: str) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 or "--help" in sys.argv:
         print("USAGE: python cli_video.py <path>")
         return
     play_video(sys.argv[1])
