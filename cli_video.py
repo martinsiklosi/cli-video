@@ -12,8 +12,8 @@ import pygame
 os.system("")  # For ANSI escape sequences to be processed correctly
 
 
-NAIVE_FRAME_RATE = 12
-FRAME_TIME_S = 1 / NAIVE_FRAME_RATE
+FRAME_RATE = 12
+FRAME_TIME_S = 1 / FRAME_RATE
 ANSI_RESET = "\033[0m"
 
 
@@ -45,7 +45,7 @@ def convert_frame(frame: np.ndarray) -> str:
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
-    frame_count = round(video.duration * NAIVE_FRAME_RATE)
+    frame_count = round(video.duration * FRAME_RATE)
     print("Loading frames")
     frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
     print("Processing frames")
@@ -53,12 +53,18 @@ def create_frames(video: VideoFileClip) -> list[str]:
 
 
 def play_frames(frames: list[str]) -> None:
-    for frame in frames:
-        before = time()
-        sys.stdout.write(frame)
-        after = time()
-        print_time = after - before
-        sleep(max(FRAME_TIME_S - print_time, 0))
+    start_time = time()
+    for i, frame in enumerate(frames):
+        correction = 0
+        if i % FRAME_RATE:
+            elapsed_time = time() - start_time
+            theoretical_elapsed_time = i / FRAME_RATE
+            correction = theoretical_elapsed_time - elapsed_time
+        time_before_print = time()
+        print(frame, end="")
+        print_time = time() - time_before_print
+        sleep_time = FRAME_TIME_S - print_time + correction
+        sleep(max(sleep_time, 0))
 
 
 def play_audio(video: VideoFileClip) -> Callable[[], None]:
@@ -91,7 +97,7 @@ def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileCl
 
 
 def play_video(path: str) -> None:
-    video = load_video(path, frame_rate=NAIVE_FRAME_RATE, size=terminal_size())
+    video = load_video(path, frame_rate=FRAME_RATE, size=terminal_size())
     frames = create_frames(video)
     try:
         audio_cleanup = play_audio(video)
