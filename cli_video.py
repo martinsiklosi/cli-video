@@ -38,10 +38,10 @@ def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_raw_frame(raw_frame: RawFrame, offset: Tuple[int, int]) -> str:
+def convert_raw_frame(frame: RawFrame, offset: Tuple[int, int]) -> str:
     output = [ANSI_RESET_CURSOR]
     output.append("\n" * offset[0])
-    for row in raw_frame:
+    for row in frame:
         output.append("\n")
         output.append("  " * offset[1])
         for pixel in row:
@@ -58,6 +58,10 @@ def convert_raw_frames_in_parallel(
         return list(tqdm(pool.imap(_convert_raw_frame, frames), total=len(frames)))
 
 
+def convert_raw_frames(frames: List[RawFrame], offset: Tuple[int, int]) -> List[str]:
+    return [convert_raw_frame(frame, offset=offset) for frame in tqdm(frames)]
+
+
 def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     terminal_height, terminal_width = max_video_size()
 
@@ -69,13 +73,15 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     return 0, horisontal_offset
 
 
-def create_frames(video: VideoFileClip) -> List[str]:
+def create_frames(video: VideoFileClip, use_multiple_cores: bool) -> List[str]:
     frame_count = round(video.duration * video.fps)
     offset = calculate_offset(video)
     print("Loading frames")
     frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
     print("Processing frames")
-    return convert_raw_frames_in_parallel(frames, offset)
+    if use_multiple_cores:
+        return convert_raw_frames_in_parallel(frames, offset=offset)
+    return convert_raw_frames(frames, offset=offset)
 
 
 class FramesPlayer:
@@ -102,7 +108,7 @@ class FramesPlayer:
     def setup_keyboard_listener(self) -> None:
         if not self.enable_pause:
             return
-        
+
         def on_press(key) -> None:
             if key == Key.space:
                 self.toggle_pause()
@@ -195,13 +201,15 @@ def load_video(path: str, frame_rate: int) -> VideoFileClip:
     return video
 
 
-def play_video(path: str, frame_rate: int, enable_pause: bool) -> None:
+def play_video(
+    path: str, frame_rate: int, enable_pause: bool, use_multiple_cores: bool
+) -> None:
     try:
         print(ANSI_HIDE_CURSOR, end="")
         video = load_video(path, frame_rate=frame_rate)
-        frames = create_frames(video)
+        frames = create_frames(video, use_multiple_cores=use_multiple_cores)
         audio_cleanup, pause_audio, unpause_audio = play_audio(video)
-        print(ANSI_CLEAR_TERMINAL, end="")
+        print(ANSI_CLEAR_TERMINAL)
         FramesPlayer(
             frames,
             frame_rate=frame_rate,
@@ -210,7 +218,7 @@ def play_video(path: str, frame_rate: int, enable_pause: bool) -> None:
             enable_pause=enable_pause,
         ).play()
     finally:
-        print(ANSI_SHOW_CURSOR, end="")
+        print(ANSI_SHOW_CURSOR)
         audio_cleanup()
         video.close()
 
@@ -219,7 +227,7 @@ def main() -> None:
     if "--help" in sys.argv:
         print("USAGE: python cli_video.py [path] [options]")
         print()
-        print("OPTIONS:\n  --frame-rate\n  --no-pause")
+        print("OPTIONS:\n  --frame-rate [desired fps]\n  --no-pause\n  --single-core")
         return
 
     try:
@@ -236,7 +244,19 @@ def main() -> None:
     except ValueError:
         enable_pause = True
 
-    play_video(sys.argv[-1], frame_rate=frame_rate, enable_pause=enable_pause)
+    try:
+        i = sys.argv.index("--single-core")
+        sys.argv.pop(i)
+        use_multiple_cores = False
+    except ValueError:
+        use_multiple_cores = True
+
+    play_video(
+        sys.argv[-1],
+        frame_rate=frame_rate,
+        enable_pause=enable_pause,
+        use_multiple_cores=use_multiple_cores,
+    )
 
 
 if __name__ == "__main__":
