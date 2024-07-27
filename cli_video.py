@@ -1,15 +1,15 @@
 import os
 import sys
-import multiprocessing as mp
 from time import time, sleep
+import multiprocessing as mp
+from tempfile import mkstemp
 from functools import partial
 from typing import Tuple, Callable, Optional, List
 
 from moviepy.editor import VideoFileClip
-from pynput.keyboard import Key
 from pynput import keyboard
+from pygame import mixer
 from tqdm import tqdm
-import pygame
 
 
 # For ANSI escape sequences to be processed correctly on windows
@@ -110,7 +110,7 @@ class FramesPlayer:
             return
 
         def on_press(key) -> None:
-            if key == Key.space:
+            if key == keyboard.Key.space:
                 self.toggle_pause()
 
         keyboard.Listener(on_press=on_press).start()
@@ -158,25 +158,24 @@ def play_audio(video: VideoFileClip) -> Tuple[AudioFunc, AudioFunc, AudioFunc]:
     if not audio:
         return lambda: None, lambda: None, lambda: None
 
-    current_time_ms = 1000 * time()
-    temp_audio_path = f"cli-video-temp-{current_time_ms:.0f}.mp3"
-    if os.path.exists(temp_audio_path):
-        raise FileExistsError("Temporary sound file already exists.")
-    audio.write_audiofile(temp_audio_path)
+    audio_fd, audio_path = mkstemp(suffix=".mp3")
+    os.close(audio_fd)
+    audio.write_audiofile(audio_path)
 
-    pygame.mixer.init()
-    pygame.mixer.music.load(temp_audio_path)
-    pygame.mixer.music.play()
+    mixer.init()
+    mixer.music.load(audio_path)
+    mixer.music.play()
 
     def cleanup() -> None:
-        pygame.mixer.music.unload()
-        os.remove(temp_audio_path)
+        mixer.music.unload()
+        mixer.quit()
+        os.remove(audio_path)
 
     def pause() -> None:
-        pygame.mixer.music.pause()
+        mixer.music.pause()
 
     def unpause() -> None:
-        pygame.mixer.music.unpause()
+        mixer.music.unpause()
 
     return cleanup, pause, unpause
 
