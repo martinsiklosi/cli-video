@@ -1,6 +1,7 @@
 import os
 import sys
 import multiprocessing as mp
+from math import ceil
 from time import time, sleep
 from functools import partial
 from typing import Tuple, Callable, Optional, List
@@ -43,7 +44,7 @@ def convert_raw_frame(frame: RawFrame, offset: Tuple[int, int]) -> str:
     output.append("\n" * offset[0])
     for row in frame:
         output.append("\n")
-        output.append("  " * offset[1])
+        output.append(" " * offset[1])
         for pixel in row:
             output.append(ansi_backround_rgb(pixel) + "  ")
         output.append(ANSI_RESET_STYLE)
@@ -66,10 +67,10 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     terminal_height, terminal_width = max_video_size()
 
     if terminal_height > video.h:
-        vertical_offset = (terminal_height - video.h) // 2
+        vertical_offset = ceil((terminal_height - video.h) / 2)
         return vertical_offset, 0
 
-    horisontal_offset = (terminal_width - video.w) // 2
+    horisontal_offset = terminal_width - video.w
     return 0, horisontal_offset
 
 
