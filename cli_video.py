@@ -2,7 +2,8 @@ import os
 import sys
 import multiprocessing as mp
 from time import time, sleep
-from typing import Tuple, Callable
+from functools import partial
+from typing import Tuple, Callable, Optional
 
 from moviepy.editor import VideoFileClip
 from tqdm import tqdm
@@ -30,37 +31,48 @@ def clear_terminal() -> None:
         os.system("clear")
 
 
-def terminal_size() -> Tuple[int, int]:
-    height = os.get_terminal_size().lines - 1
-    width = os.get_terminal_size().columns // 2
-    return height, width
-
-
 def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_raw_frame(raw_frame: RawFrame) -> str:
+def convert_raw_frame(raw_frame: RawFrame, offset: Tuple[int, int]) -> str:
     output = [ANSI_RESET_CURSOR]
+    output.append("\n" * offset[0])
     for row in raw_frame:
         output.append("\n")
+        output.append("  " * offset[1])
         for pixel in row:
             output.append(ansi_backround_rgb(pixel) + "  ")
         output.append(ANSI_RESET_STYLE)
     return "".join(output)
 
 
-def convert_raw_frames_in_parallel(frames: list[RawFrame]) -> list[str]:
+def convert_raw_frames_in_parallel(
+    frames: list[RawFrame], offset: Tuple[int, int]
+) -> list[str]:
+    _convert_raw_frame = partial(convert_raw_frame, offset=offset)
     with mp.Pool(processes=mp.cpu_count()) as pool:
-        return list(tqdm(pool.imap(convert_raw_frame, frames), total=len(frames)))
+        return list(tqdm(pool.imap(_convert_raw_frame, frames), total=len(frames)))
+
+
+def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
+    terminal_height, terminal_width = terminal_size()
+
+    if terminal_height > video.h:
+        vertical_offset = (terminal_height - video.h) // 2
+        return vertical_offset, 0
+
+    horisontal_offset = (terminal_width - video.w) // 2
+    return 0, horisontal_offset
 
 
 def create_frames(video: VideoFileClip) -> list[str]:
     frame_count = round(video.duration * video.fps)
+    offset = calculate_offset(video)
     print("Loading frames")
     frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
     print("Processing frames")
-    return convert_raw_frames_in_parallel(frames)
+    return convert_raw_frames_in_parallel(frames, offset)
 
 
 def play_frames(frames: list[str], frame_rate: int) -> None:
@@ -99,9 +111,27 @@ def play_audio(video: VideoFileClip) -> Callable[[], None]:
     return cleanup
 
 
-def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileClip:
+def terminal_size() -> Tuple[int, int]:
+    height = os.get_terminal_size().lines - 1
+    width = os.get_terminal_size().columns // 2
+    return height, width
+
+
+def calculate_target_resolution(path: str) -> Tuple[Optional[int], Optional[int]]:
+    video = VideoFileClip(path)
+    terminal_height, terminal_width = terminal_size()
+    terminal_aspect_ratio = terminal_width / terminal_height
+
+    if terminal_aspect_ratio < video.aspect_ratio:
+        return None, terminal_width
+    return terminal_height, None
+
+
+def load_video(path: str, frame_rate: int) -> VideoFileClip:
     video = VideoFileClip(
-        path, target_resolution=size, resize_algorithm="fast_bilinear"
+        path,
+        target_resolution=calculate_target_resolution(path),
+        resize_algorithm="fast_bilinear",
     )
     video = video.set_fps(frame_rate)
     return video
@@ -109,7 +139,7 @@ def load_video(path: str, frame_rate: int, size: Tuple[int, int]) -> VideoFileCl
 
 def play_video(path: str, frame_rate: int) -> None:
     print(ANSI_HIDE_CURSOR, end="")
-    video = load_video(path, frame_rate=frame_rate, size=terminal_size())
+    video = load_video(path, frame_rate=frame_rate)
     frames = create_frames(video)
     try:
         audio_cleanup = play_audio(video)
@@ -128,14 +158,14 @@ def main() -> None:
         print()
         print("OPTIONS:\n  --frame-rate")
         return
-    
+
     try:
         i = sys.argv.index("--frame-rate")
         sys.argv.pop(i)
         frame_rate = int(sys.argv.pop(i))
     except ValueError:
         frame_rate = 24
-    
+
     play_video(sys.argv[1], frame_rate=frame_rate)
 
 
