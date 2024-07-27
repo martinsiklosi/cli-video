@@ -6,6 +6,10 @@
 *.mp3
 *.wav
 
+# Profile files
+profile.json
+profile.html
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
