@@ -5,6 +5,7 @@
 *.MOV
 *.mp3
 *.wav
+videos/
 
 # Profile files
 profile.json
