@@ -85,12 +85,14 @@ class FramesPlayer:
         frame_rate: int,
         pause_audio: AudioFunc,
         unpause_audio: AudioFunc,
+        enable_pause: bool,
     ) -> None:
         self.frames = frames
         self.frame_rate = frame_rate
         self.frame_time_s = 1 / self.frame_rate
         self.pause_audio = pause_audio
         self.unpause_audio = unpause_audio
+        self.enable_pause = enable_pause
         self.is_paused = False
         self.start_time = 0
         self.pause_time = None
@@ -98,6 +100,9 @@ class FramesPlayer:
         self.setup_keyboard_listener()
 
     def setup_keyboard_listener(self) -> None:
+        if not self.enable_pause:
+            return
+        
         def on_press(key) -> None:
             if key == Key.space:
                 self.toggle_pause()
@@ -168,7 +173,6 @@ def play_audio(video: VideoFileClip) -> Tuple[AudioFunc, AudioFunc, AudioFunc]:
         pygame.mixer.music.unpause()
 
     return cleanup, pause, unpause
-            
 
 
 def calculate_target_resolution(path: str) -> Tuple[Optional[int], Optional[int]]:
@@ -191,7 +195,7 @@ def load_video(path: str, frame_rate: int) -> VideoFileClip:
     return video
 
 
-def play_video(path: str, frame_rate: int) -> None:
+def play_video(path: str, frame_rate: int, enable_pause: bool) -> None:
     try:
         print(ANSI_HIDE_CURSOR, end="")
         video = load_video(path, frame_rate=frame_rate)
@@ -203,6 +207,7 @@ def play_video(path: str, frame_rate: int) -> None:
             frame_rate=frame_rate,
             pause_audio=pause_audio,
             unpause_audio=unpause_audio,
+            enable_pause=enable_pause,
         ).play()
     finally:
         print(ANSI_SHOW_CURSOR, end="")
@@ -214,7 +219,7 @@ def main() -> None:
     if "--help" in sys.argv:
         print("USAGE: python cli_video.py [path] [options]")
         print()
-        print("OPTIONS:\n  --frame-rate")
+        print("OPTIONS:\n  --frame-rate\n  --no-pause")
         return
 
     try:
@@ -224,7 +229,14 @@ def main() -> None:
     except ValueError:
         frame_rate = 24
 
-    play_video(sys.argv[-1], frame_rate=frame_rate)
+    try:
+        i = sys.argv.index("--no-pause")
+        sys.argv.pop(i)
+        enable_pause = False
+    except ValueError:
+        enable_pause = True
+
+    play_video(sys.argv[-1], frame_rate=frame_rate, enable_pause=enable_pause)
 
 
 if __name__ == "__main__":
