@@ -18,17 +18,11 @@ ANSI_RESET_STYLE = "\033[0m"
 ANSI_RESET_CURSOR = "\033[H"
 ANSI_HIDE_CURSOR = "\033[?25l"
 ANSI_SHOW_CURSOR = "\033[?25h"
+ANSI_CLEAR_TERMINAL = "\033[2J"
 
 
 Rgb = Tuple[int, int, int]
 RawFrame = list[list[Rgb]]
-
-
-def clear_terminal() -> None:
-    if os.name == "nt":
-        os.system("cls")
-    else:
-        os.system("clear")
 
 
 def ansi_backround_rgb(rgb: Rgb) -> str:
@@ -143,9 +137,8 @@ def play_video(path: str, frame_rate: int) -> None:
     frames = create_frames(video)
     try:
         audio_cleanup = play_audio(video)
-        clear_terminal()
+        print(ANSI_CLEAR_TERMINAL, end="")
         play_frames(frames, frame_rate=frame_rate)
-        clear_terminal()
     finally:
         print(ANSI_SHOW_CURSOR, end="")
         audio_cleanup()
