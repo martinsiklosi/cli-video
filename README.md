@@ -1,4 +1,4 @@
-# A simple command-line in-terminal video player
+# A Simple Command-Line In-Terminal Video Player
 
 ![demo](demo.png)
 
@@ -9,8 +9,7 @@ pip install -r requirements.txt
 
 ## Run
 
-To run in its most basic for
-
+To run in its most basic form
 ```bash
 python cli_video.py /path/to/video
 ```
