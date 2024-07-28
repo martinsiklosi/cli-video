@@ -1,9 +1,9 @@
 import os
-import sys
 from time import time, sleep
 import multiprocessing as mp
 from tempfile import mkstemp
 from functools import partial
+from argparse import ArgumentParser
 from typing import Tuple, Callable, Optional, List
 
 from moviepy.editor import VideoFileClip
@@ -223,38 +223,28 @@ def play_video(
 
 
 def main() -> None:
-    if "--help" in sys.argv:
-        print("USAGE: python cli_video.py [path] [options]")
-        print()
-        print("OPTIONS:\n  --frame-rate [desired fps]\n  --no-pause\n  --single-core")
-        return
+    default_frame_rate = 24
 
-    try:
-        i = sys.argv.index("--frame-rate")
-        sys.argv.pop(i)
-        frame_rate = int(sys.argv.pop(i))
-    except ValueError:
-        frame_rate = 24
-
-    try:
-        i = sys.argv.index("--no-pause")
-        sys.argv.pop(i)
-        enable_pause = False
-    except ValueError:
-        enable_pause = True
-
-    try:
-        i = sys.argv.index("--single-core")
-        sys.argv.pop(i)
-        use_multiple_cores = False
-    except ValueError:
-        use_multiple_cores = True
+    parser = ArgumentParser()
+    parser.add_argument("path", help="path to video file")
+    parser.add_argument(
+        "-f",
+        "--frame-rate",
+        type=int,
+        default=default_frame_rate,
+        help=f"default {default_frame_rate}",
+    )
+    parser.add_argument("-n", "--no-pause", action="store_true", help="disable pausing")
+    parser.add_argument(
+        "-s", "--single-core", action="store_true", help="disable multiprocessing"
+    )
+    arguments = parser.parse_args()
 
     play_video(
-        sys.argv[-1],
-        frame_rate=frame_rate,
-        enable_pause=enable_pause,
-        use_multiple_cores=use_multiple_cores,
+        arguments.path,
+        frame_rate=arguments.frame_rate,
+        enable_pause=not arguments.no_pause,
+        use_multiple_cores=not arguments.single_core,
     )
 
 
