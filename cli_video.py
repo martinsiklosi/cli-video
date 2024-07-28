@@ -200,9 +200,16 @@ def load_video(path: str, frame_rate: int) -> VideoFileClip:
     return video
 
 
+class DummyVideo:
+    def close(self) -> None:
+        pass
+
+
 def play_video(
     path: str, frame_rate: int, enable_pause: bool, use_multiple_cores: bool
 ) -> None:
+    audio_cleanup = lambda: None
+    video = DummyVideo()
     try:
         print(ANSI_HIDE_CURSOR, end="")
         video = load_video(path, frame_rate=frame_rate)
