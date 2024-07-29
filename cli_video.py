@@ -3,9 +3,10 @@ from time import time, sleep
 import multiprocessing as mp
 from tempfile import mkstemp
 from functools import partial
+from dataclasses import dataclass
 from argparse import ArgumentParser
 from contextlib import contextmanager
-from typing import Tuple, Callable, Optional, List
+from typing import Tuple, Callable, Optional, List, Generator
 
 from moviepy.editor import VideoFileClip
 from pynput import keyboard
@@ -27,6 +28,7 @@ ANSI_CLEAR_TERMINAL = "\033[2J"
 Rgb = Tuple[int, int, int]
 RawFrame = List[List[Rgb]]
 AudioFunc = Callable[[], None]
+TargetResolution = Tuple[Optional[int], Optional[int]]
 
 
 def max_video_size() -> Tuple[int, int]:
@@ -40,11 +42,13 @@ def ansi_backround_rgb(rgb: Rgb) -> str:
 
 
 def convert_raw_frame(frame: RawFrame, offset: Tuple[int, int]) -> str:
-    output = [ANSI_RESET_CURSOR]
-    output.append("\n" * offset[0])
+    vertical_offset = "\n" * offset[0]
+    horizontal_offset = " " * offset[1]
+
+    output = [ANSI_RESET_CURSOR, vertical_offset]
     for row in frame:
         output.append("\n")
-        output.append(" " * offset[1])
+        output.append(horizontal_offset)
         for pixel in row:
             output.append(ansi_backround_rgb(pixel) + "  ")
         output.append(ANSI_RESET_STYLE)
@@ -85,20 +89,34 @@ def create_frames(video: VideoFileClip, use_multiple_cores: bool) -> List[str]:
     return convert_raw_frames(frames, offset=offset)
 
 
-class FramesPlayer:
+@contextmanager
+def hidden_cursor():
+    print(ANSI_HIDE_CURSOR, end="")
+    try:
+        yield
+    finally:
+        print(ANSI_SHOW_CURSOR, end="")
+
+
+@dataclass(frozen=True)
+class AudioInterface:
+    play: AudioFunc
+    pause: AudioFunc
+    unpause: AudioFunc
+
+
+class Player:
     def __init__(
         self,
         frames: List[str],
         frame_rate: int,
-        pause_audio: AudioFunc,
-        unpause_audio: AudioFunc,
+        audio_interface: AudioInterface,
         enable_pause: bool,
     ) -> None:
         self.frames = frames
         self.frame_rate = frame_rate
         self.frame_time_s = 1 / self.frame_rate
-        self.pause_audio = pause_audio
-        self.unpause_audio = unpause_audio
+        self.audio_interface = audio_interface
         self.enable_pause = enable_pause
         self.is_paused = False
         self.start_time = 0
@@ -119,11 +137,11 @@ class FramesPlayer:
     def toggle_pause(self) -> None:
         if self.is_paused:
             assert isinstance(self.pause_time, float)
-            self.unpause_audio()
+            self.audio_interface.unpause()
             self.start_time += time() - self.pause_time
             self.pause_time = None
         else:
-            self.pause_audio()
+            self.audio_interface.pause()
             self.pause_time = time()
         self.is_paused = not self.is_paused
 
@@ -145,73 +163,53 @@ class FramesPlayer:
 
     def play(self) -> None:
         self.start_time = time()
-        for i, frame in enumerate(self.frames):
-            self.handle_pause()
-            correction_s = self.calculate_correction_s(frame_index=i)
-            if correction_s + self.frame_time_s < 0:
-                continue
-            print(frame, end="")
-            self.frame_sleep(correction_s)
+        self.audio_interface.play()
+        print(ANSI_CLEAR_TERMINAL)
+        with hidden_cursor():
+            for i, frame in enumerate(self.frames):
+                self.handle_pause()
+                correction_s = self.calculate_correction_s(frame_index=i)
+                if correction_s + self.frame_time_s < 0:
+                    continue
+                print(frame, end="")
+                self.frame_sleep(correction_s)
 
 
+@contextmanager
 def load_audio(
     video: VideoFileClip,
-) -> Tuple[AudioFunc, AudioFunc, AudioFunc, AudioFunc]:
-    audio = video.audio
-    if not audio:
-        return lambda: None, lambda: None, lambda: None, lambda: None
+) -> Generator[AudioInterface, None, None]:
+    try:
+        audio = video.audio
+        if not audio:
+            yield AudioInterface(lambda: None, lambda: None, lambda: None)
+        else:
+            audio_fd, audio_path = mkstemp(suffix=".mp3")
+            os.close(audio_fd)
+            audio.write_audiofile(audio_path)
 
-    audio_fd, audio_path = mkstemp(suffix=".mp3")
-    os.close(audio_fd)
-    audio.write_audiofile(audio_path)
+            mixer.init()
+            mixer.music.load(audio_path)
 
-    mixer.init()
-    mixer.music.load(audio_path)
-
-    def cleanup() -> None:
+            yield AudioInterface(
+                play=mixer.music.play,
+                pause=mixer.music.pause,
+                unpause=mixer.music.unpause,
+            )
+    finally:
         mixer.music.unload()
         mixer.quit()
         os.remove(audio_path)
 
-    def play() -> None:
-        mixer.music.play()
 
-    def pause() -> None:
-        mixer.music.pause()
-
-    def unpause() -> None:
-        mixer.music.unpause()
-
-    return play, pause, unpause, cleanup
-
-
-def calculate_target_resolution(path: str) -> Tuple[Optional[int], Optional[int]]:
-    video = VideoFileClip(path)
+def calculate_target_resolution(path: str) -> TargetResolution:
     terminal_height, terminal_width = max_video_size()
     terminal_aspect_ratio = terminal_width / terminal_height
 
-    if terminal_aspect_ratio < video.aspect_ratio:
-        return None, terminal_width
-    return terminal_height, None
-
-
-def load_video(path: str, frame_rate: int) -> VideoFileClip:
-    video = VideoFileClip(
-        path,
-        target_resolution=calculate_target_resolution(path),
-        resize_algorithm="fast_bilinear",
-    )
-    video = video.set_fps(frame_rate)
-    return video
-
-
-@contextmanager
-def hidden_cursor():
-    print(ANSI_HIDE_CURSOR, end="")
-    try:
-        yield
-    finally:
-        print(ANSI_SHOW_CURSOR, end="")
+    with load_video(path) as video:
+        if terminal_aspect_ratio < video.aspect_ratio:
+            return None, terminal_width
+        return terminal_height, None
 
 
 class DummyVideo:
@@ -219,28 +217,43 @@ class DummyVideo:
         pass
 
 
-def play_video(
-    path: str, frame_rate: int, enable_pause: bool, use_multiple_cores: bool
-) -> None:
-    cleanup_audio = lambda: None
+@contextmanager
+def load_video(
+    path: str,
+    frame_rate: Optional[int] = None,
+    target_resolution: Optional[TargetResolution] = None,
+) -> Generator[VideoFileClip, None, None]:
     video = DummyVideo()
     try:
-        with hidden_cursor():
-            video = load_video(path, frame_rate=frame_rate)
-            play_audio, pause_audio, unpause_audio, cleanup_audio = load_audio(video)
-            frames = create_frames(video, use_multiple_cores=use_multiple_cores)
-            print(ANSI_CLEAR_TERMINAL)
-            play_audio()
-            FramesPlayer(
-                frames,
-                frame_rate=frame_rate,
-                pause_audio=pause_audio,
-                unpause_audio=unpause_audio,
-                enable_pause=enable_pause,
-            ).play()
+        video = VideoFileClip(
+            path,
+            target_resolution=target_resolution,
+            resize_algorithm="fast_bilinear",
+        )
+        if frame_rate is not None:
+            video = video.set_fps(frame_rate)
+        yield video
     finally:
-        cleanup_audio()
         video.close()
+
+
+def play_video(
+    path: str,
+    frame_rate: Optional[int],
+    enable_pause: bool = True,
+    use_multiple_cores: bool = True,
+) -> None:
+    target_resolution = calculate_target_resolution(path)
+    with load_video(
+        path, frame_rate=frame_rate, target_resolution=target_resolution
+    ) as video, load_audio(video) as audio_interface:
+        frames = create_frames(video, use_multiple_cores=use_multiple_cores)
+        Player(
+            frames=frames,
+            frame_rate=video.fps,
+            audio_interface=audio_interface,
+            enable_pause=enable_pause,
+        ).play()
 
 
 def main() -> None:
