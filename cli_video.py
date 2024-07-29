@@ -4,6 +4,7 @@ import multiprocessing as mp
 from tempfile import mkstemp
 from functools import partial
 from argparse import ArgumentParser
+from contextlib import contextmanager
 from typing import Tuple, Callable, Optional, List
 
 from moviepy.editor import VideoFileClip
@@ -153,10 +154,12 @@ class FramesPlayer:
             self.frame_sleep(correction_s)
 
 
-def play_audio(video: VideoFileClip) -> Tuple[AudioFunc, AudioFunc, AudioFunc]:
+def load_audio(
+    video: VideoFileClip,
+) -> Tuple[AudioFunc, AudioFunc, AudioFunc, AudioFunc]:
     audio = video.audio
     if not audio:
-        return lambda: None, lambda: None, lambda: None
+        return lambda: None, lambda: None, lambda: None, lambda: None
 
     audio_fd, audio_path = mkstemp(suffix=".mp3")
     os.close(audio_fd)
@@ -164,12 +167,14 @@ def play_audio(video: VideoFileClip) -> Tuple[AudioFunc, AudioFunc, AudioFunc]:
 
     mixer.init()
     mixer.music.load(audio_path)
-    mixer.music.play()
 
     def cleanup() -> None:
         mixer.music.unload()
         mixer.quit()
         os.remove(audio_path)
+
+    def play() -> None:
+        mixer.music.play()
 
     def pause() -> None:
         mixer.music.pause()
@@ -177,7 +182,7 @@ def play_audio(video: VideoFileClip) -> Tuple[AudioFunc, AudioFunc, AudioFunc]:
     def unpause() -> None:
         mixer.music.unpause()
 
-    return cleanup, pause, unpause
+    return play, pause, unpause, cleanup
 
 
 def calculate_target_resolution(path: str) -> Tuple[Optional[int], Optional[int]]:
@@ -200,6 +205,15 @@ def load_video(path: str, frame_rate: int) -> VideoFileClip:
     return video
 
 
+@contextmanager
+def hidden_cursor():
+    print(ANSI_HIDE_CURSOR, end="")
+    try:
+        yield
+    finally:
+        print(ANSI_SHOW_CURSOR, end="")
+
+
 class DummyVideo:
     def close(self) -> None:
         pass
@@ -208,24 +222,24 @@ class DummyVideo:
 def play_video(
     path: str, frame_rate: int, enable_pause: bool, use_multiple_cores: bool
 ) -> None:
-    audio_cleanup = lambda: None
+    cleanup_audio = lambda: None
     video = DummyVideo()
     try:
-        print(ANSI_HIDE_CURSOR, end="")
-        video = load_video(path, frame_rate=frame_rate)
-        frames = create_frames(video, use_multiple_cores=use_multiple_cores)
-        audio_cleanup, pause_audio, unpause_audio = play_audio(video)
-        print(ANSI_CLEAR_TERMINAL)
-        FramesPlayer(
-            frames,
-            frame_rate=frame_rate,
-            pause_audio=pause_audio,
-            unpause_audio=unpause_audio,
-            enable_pause=enable_pause,
-        ).play()
+        with hidden_cursor():
+            video = load_video(path, frame_rate=frame_rate)
+            play_audio, pause_audio, unpause_audio, cleanup_audio = load_audio(video)
+            frames = create_frames(video, use_multiple_cores=use_multiple_cores)
+            print(ANSI_CLEAR_TERMINAL)
+            play_audio()
+            FramesPlayer(
+                frames,
+                frame_rate=frame_rate,
+                pause_audio=pause_audio,
+                unpause_audio=unpause_audio,
+                enable_pause=enable_pause,
+            ).play()
     finally:
-        print(ANSI_SHOW_CURSOR)
-        audio_cleanup()
+        cleanup_audio()
         video.close()
 
 
