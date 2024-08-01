@@ -179,6 +179,7 @@ class Player:
 def load_audio(
     video: VideoFileClip,
 ) -> Generator[AudioInterface, None, None]:
+    audio_path = None
     try:
         audio = video.audio
         if not audio:
@@ -199,7 +200,8 @@ def load_audio(
     finally:
         mixer.music.unload()
         mixer.quit()
-        os.remove(audio_path)
+        if audio_path:
+            os.remove(audio_path)
 
 
 def calculate_target_resolution(path: str) -> TargetResolution:
