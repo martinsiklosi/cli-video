@@ -85,12 +85,13 @@ class Player:
         self,
         video: VideoFileClip,
         audio_interface: AudioInterface,
+        offset: Tuple[int, int],
         enable_pause: bool,
     ) -> None:
         self.video = video
         self.frame_rate = video.fps
         self.frame_time_s = 1 / self.frame_rate
-        self.offset = calculate_offset(self.video)
+        self.offset = offset
         self.audio_interface = audio_interface
         self.enable_pause = enable_pause
         self.is_paused = False
@@ -224,9 +225,11 @@ def play_video(
     with load_video(
         path, frame_rate=frame_rate, target_resolution=target_resolution
     ) as video, load_audio(video) as audio_interface:
+        offset = calculate_offset(video)
         Player(
             video=video,
             audio_interface=audio_interface,
+            offset=offset,
             enable_pause=enable_pause,
         ).play()
 
