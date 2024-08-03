@@ -1,12 +1,12 @@
 import os
 from io import BytesIO
 from time import time, sleep
-from dataclasses import dataclass
 from argparse import ArgumentParser
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import Tuple, Callable, Optional, List, Generator
 
-from moviepy.editor import VideoFileClip
+from moviepy.editor import AudioFileClip, VideoFileClip
 from pynput import keyboard
 from pygame import mixer
 import soundfile
@@ -75,11 +75,11 @@ def hidden_cursor():
 
 @dataclass(frozen=True)
 class AudioInterface:
-    play: AudioFunc
-    pause: AudioFunc
-    unpause: AudioFunc
-    raise_volume: AudioFunc
-    lower_volume: AudioFunc
+    play: AudioFunc = field(default=lambda: None)
+    pause: AudioFunc = field(default=lambda: None)
+    unpause: AudioFunc = field(default=lambda: None)
+    raise_volume: AudioFunc = field(default=lambda: None)
+    lower_volume: AudioFunc = field(default=lambda: None)
 
 
 class Player:
@@ -158,21 +158,7 @@ class Player:
                 self.frame_sleep(correction_s)
 
 
-@contextmanager
-def load_audio(
-    video: VideoFileClip,
-) -> Generator[AudioInterface, None, None]:
-    audio = video.audio
-    if not audio:
-        yield AudioInterface(
-            lambda: None,
-            lambda: None,
-            lambda: None,
-            lambda: None,
-            lambda: None
-        )
-        return
-
+def convert_audio_to_bytes_io(audio: AudioFileClip) -> BytesIO:
     soundarray = audio.to_soundarray()
     bytes_io = BytesIO()
     soundfile.write(
@@ -182,8 +168,20 @@ def load_audio(
         format="wav"
     )
     bytes_io.seek(0)
+    return bytes_io
+
+
+@contextmanager
+def load_audio(
+    video: VideoFileClip,
+) -> Generator[AudioInterface, None, None]:
+    audio = video.audio
+    if not audio:
+        yield AudioInterface()
+        return
 
     mixer.init()
+    bytes_io = convert_audio_to_bytes_io(audio)
     mixer.music.load(bytes_io, namehint="wav")
 
     volume_increment = 0.1
