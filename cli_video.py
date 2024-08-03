@@ -78,6 +78,8 @@ class AudioInterface:
     play: AudioFunc
     pause: AudioFunc
     unpause: AudioFunc
+    raise_volume: AudioFunc
+    lower_volume: AudioFunc
 
 
 class Player:
@@ -86,14 +88,14 @@ class Player:
         video: VideoFileClip,
         audio_interface: AudioInterface,
         offset: Tuple[int, int],
-        enable_pause: bool,
+        enable_keyboard: bool,
     ) -> None:
         self.video = video
         self.frame_rate = video.fps
         self.frame_time_s = 1 / self.frame_rate
         self.offset = offset
         self.audio_interface = audio_interface
-        self.enable_pause = enable_pause
+        self.enable_keyboard = enable_keyboard
         self.is_paused = False
         self.start_time = 0
         self.pause_time = None
@@ -101,12 +103,16 @@ class Player:
         self.setup_keyboard_listener()
 
     def setup_keyboard_listener(self) -> None:
-        if not self.enable_pause:
+        if not self.enable_keyboard:
             return
 
         def on_press(key) -> None:
             if key == keyboard.Key.space:
                 self.toggle_pause()
+            if key == keyboard.Key.up:
+                self.audio_interface.raise_volume()
+            if key == keyboard.Key.down:
+                self.audio_interface.lower_volume()
 
         keyboard.Listener(on_press=on_press).start()
 
@@ -158,7 +164,13 @@ def load_audio(
 ) -> Generator[AudioInterface, None, None]:
     audio = video.audio
     if not audio:
-        yield AudioInterface(lambda: None, lambda: None, lambda: None)
+        yield AudioInterface(
+            lambda: None,
+            lambda: None,
+            lambda: None,
+            lambda: None,
+            lambda: None
+        )
         return
 
     soundarray = audio.to_soundarray()
@@ -174,11 +186,29 @@ def load_audio(
     mixer.init()
     mixer.music.load(bytes_io, namehint="wav")
 
+    volume_increment = 0.1
+    default_volume = 0.7
+    mixer.music.set_volume(default_volume)
+
+    def raise_volume() -> None:
+        proposed_volume = mixer.music.get_volume() + volume_increment
+        max_volume = 1.0
+        new_volume = min(proposed_volume, max_volume)
+        mixer.music.set_volume(new_volume)
+
+    def lower_volume() -> None:
+        proposed_volume = mixer.music.get_volume() - volume_increment
+        min_volume = 0.0
+        new_volume = max(proposed_volume, min_volume)
+        mixer.music.set_volume(new_volume)
+
     try:
         yield AudioInterface(
             play=mixer.music.play,
             pause=mixer.music.pause,
             unpause=mixer.music.unpause,
+            raise_volume=raise_volume,
+            lower_volume=lower_volume
         )
     finally:
         mixer.music.unload()
@@ -218,7 +248,7 @@ def load_video(
 def play_video(
     path: str,
     frame_rate: Optional[int],
-    enable_pause: bool = True,
+    enable_keyboard: bool = True,
 ) -> None:
     target_resolution = calculate_target_resolution(path)
     with load_video(
@@ -229,7 +259,7 @@ def play_video(
             video=video,
             audio_interface=audio_interface,
             offset=offset,
-            enable_pause=enable_pause,
+            enable_keyboard=enable_keyboard,
         ).play()
 
 
@@ -245,13 +275,13 @@ def main() -> None:
         default=default_frame_rate,
         help=f"default {default_frame_rate}",
     )
-    parser.add_argument("-n", "--no-pause", action="store_true", help="disable pausing")
+    parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
     arguments = parser.parse_args()
 
     play_video(
         arguments.path,
         frame_rate=arguments.frame_rate,
-        enable_pause=not arguments.no_pause,
+        enable_keyboard=not arguments.disable_keyboard,
     )
 
 
