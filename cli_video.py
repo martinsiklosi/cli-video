@@ -1,8 +1,6 @@
 import os
 from time import time, sleep
-import multiprocessing as mp
 from tempfile import mkstemp
-from functools import partial
 from dataclasses import dataclass
 from argparse import ArgumentParser
 from contextlib import contextmanager
@@ -26,7 +24,7 @@ ANSI_CLEAR_TERMINAL = "\033[2J"
 
 
 Rgb = Tuple[int, int, int]
-RawFrame = List[List[Rgb]]
+Frame = List[List[Rgb]]
 AudioFunc = Callable[[], None]
 TargetResolution = Tuple[Optional[int], Optional[int]]
 
@@ -41,7 +39,7 @@ def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_raw_frame(frame: RawFrame, offset: Tuple[int, int]) -> str:
+def convert_frame(frame: Frame, offset: Tuple[int, int]) -> str:
     vertical_offset = "\n" * offset[0]
     horizontal_offset = " " * offset[1]
 
@@ -55,18 +53,6 @@ def convert_raw_frame(frame: RawFrame, offset: Tuple[int, int]) -> str:
     return "".join(output)
 
 
-def convert_raw_frames_in_parallel(
-    frames: List[RawFrame], offset: Tuple[int, int]
-) -> List[str]:
-    _convert_raw_frame = partial(convert_raw_frame, offset=offset)
-    with mp.Pool(processes=mp.cpu_count()) as pool:
-        return list(tqdm(pool.imap(_convert_raw_frame, frames), total=len(frames)))
-
-
-def convert_raw_frames(frames: List[RawFrame], offset: Tuple[int, int]) -> List[str]:
-    return [convert_raw_frame(frame, offset=offset) for frame in tqdm(frames)]
-
-
 def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     terminal_height, terminal_width = max_video_size()
 
@@ -78,15 +64,10 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     return 0, horisontal_offset
 
 
-def create_frames(video: VideoFileClip, use_multiple_cores: bool) -> List[str]:
+def extract_frames(video: VideoFileClip) -> List[Frame]:
     frame_count = round(video.duration * video.fps)
-    offset = calculate_offset(video)
     print("Loading frames")
-    frames = [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
-    print("Processing frames")
-    if use_multiple_cores:
-        return convert_raw_frames_in_parallel(frames, offset=offset)
-    return convert_raw_frames(frames, offset=offset)
+    return [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
 
 
 @contextmanager
@@ -108,14 +89,16 @@ class AudioInterface:
 class Player:
     def __init__(
         self,
-        frames: List[str],
+        frames: List[Frame],
         frame_rate: int,
+        offset: Tuple[int, int],
         audio_interface: AudioInterface,
         enable_pause: bool,
     ) -> None:
         self.frames = frames
         self.frame_rate = frame_rate
         self.frame_time_s = 1 / self.frame_rate
+        self.offset = offset
         self.audio_interface = audio_interface
         self.enable_pause = enable_pause
         self.is_paused = False
@@ -171,7 +154,8 @@ class Player:
                 correction_s = self.calculate_correction_s(frame_index=i)
                 if correction_s + self.frame_time_s < 0:
                     continue
-                print(frame, end="")
+                printable_frame = convert_frame(frame, offset=self.offset)
+                print(printable_frame, end="")
                 self.frame_sleep(correction_s)
 
 
@@ -243,16 +227,17 @@ def play_video(
     path: str,
     frame_rate: Optional[int],
     enable_pause: bool = True,
-    use_multiple_cores: bool = True,
 ) -> None:
     target_resolution = calculate_target_resolution(path)
     with load_video(
         path, frame_rate=frame_rate, target_resolution=target_resolution
     ) as video, load_audio(video) as audio_interface:
-        frames = create_frames(video, use_multiple_cores=use_multiple_cores)
+        frames = extract_frames(video)
+        offset = calculate_offset(video)
         Player(
             frames=frames,
             frame_rate=video.fps,
+            offset=offset,
             audio_interface=audio_interface,
             enable_pause=enable_pause,
         ).play()
@@ -271,16 +256,12 @@ def main() -> None:
         help=f"default {default_frame_rate}",
     )
     parser.add_argument("-n", "--no-pause", action="store_true", help="disable pausing")
-    parser.add_argument(
-        "-s", "--single-core", action="store_true", help="disable multiprocessing"
-    )
     arguments = parser.parse_args()
 
     play_video(
         arguments.path,
         frame_rate=arguments.frame_rate,
         enable_pause=not arguments.no_pause,
-        use_multiple_cores=not arguments.single_core,
     )
 
 
