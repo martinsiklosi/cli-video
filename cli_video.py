@@ -1,5 +1,5 @@
 import os
-import io
+from io import BytesIO
 from time import time, sleep
 from dataclasses import dataclass
 from argparse import ArgumentParser
@@ -130,10 +130,10 @@ class Player:
         sleep_time_s = self.frame_time_s + correction_s
         sleep(max(sleep_time_s, 0))
 
-    def handle_pause(self) -> None:
+    def block_while_paused(self) -> None:
         while self.is_paused:
             sleep(self.check_paused_time_s)
-        # Make sure start time has been corrected
+        # Make sure start_time has been corrected
         while self.pause_time is not None:
             sleep(self.check_paused_time_s)
 
@@ -143,7 +143,7 @@ class Player:
         print(ANSI_CLEAR_TERMINAL)
         with hidden_cursor():
             for i, frame in enumerate(self.video.iter_frames()):
-                self.handle_pause()
+                self.block_while_paused()
                 correction_s = self.calculate_correction_s(frame_index=i)
                 if correction_s + self.frame_time_s < 0:
                     continue
@@ -162,7 +162,7 @@ def load_audio(
         return
 
     soundarray = audio.to_soundarray()
-    bytes_io = io.BytesIO()
+    bytes_io = BytesIO()
     soundfile.write(
         bytes_io,
         soundarray,
