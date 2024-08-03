@@ -64,12 +64,6 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     return 0, horisontal_offset
 
 
-def extract_frames(video: VideoFileClip) -> List[Frame]:
-    frame_count = round(video.duration * video.fps)
-    print("Loading frames")
-    return [frame for frame in tqdm(video.iter_frames(), total=frame_count)]
-
-
 @contextmanager
 def hidden_cursor():
     print(ANSI_HIDE_CURSOR, end="")
@@ -89,16 +83,14 @@ class AudioInterface:
 class Player:
     def __init__(
         self,
-        frames: List[Frame],
-        frame_rate: int,
-        offset: Tuple[int, int],
+        video: VideoFileClip,
         audio_interface: AudioInterface,
         enable_pause: bool,
     ) -> None:
-        self.frames = frames
-        self.frame_rate = frame_rate
+        self.video = video
+        self.frame_rate = video.fps
         self.frame_time_s = 1 / self.frame_rate
-        self.offset = offset
+        self.offset = calculate_offset(self.video)
         self.audio_interface = audio_interface
         self.enable_pause = enable_pause
         self.is_paused = False
@@ -149,7 +141,7 @@ class Player:
         self.audio_interface.play()
         print(ANSI_CLEAR_TERMINAL)
         with hidden_cursor():
-            for i, frame in enumerate(self.frames):
+            for i, frame in enumerate(self.video.iter_frames()):
                 self.handle_pause()
                 correction_s = self.calculate_correction_s(frame_index=i)
                 if correction_s + self.frame_time_s < 0:
@@ -232,12 +224,8 @@ def play_video(
     with load_video(
         path, frame_rate=frame_rate, target_resolution=target_resolution
     ) as video, load_audio(video) as audio_interface:
-        frames = extract_frames(video)
-        offset = calculate_offset(video)
         Player(
-            frames=frames,
-            frame_rate=video.fps,
-            offset=offset,
+            video=video,
             audio_interface=audio_interface,
             enable_pause=enable_pause,
         ).play()
