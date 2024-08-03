@@ -1,6 +1,6 @@
 import os
+import io
 from time import time, sleep
-from tempfile import mkstemp
 from dataclasses import dataclass
 from argparse import ArgumentParser
 from contextlib import contextmanager
@@ -9,7 +9,7 @@ from typing import Tuple, Callable, Optional, List, Generator
 from moviepy.editor import VideoFileClip
 from pynput import keyboard
 from pygame import mixer
-from tqdm import tqdm
+import soundfile
 
 
 # For ANSI escape sequences to be processed correctly on windows
@@ -156,29 +156,33 @@ class Player:
 def load_audio(
     video: VideoFileClip,
 ) -> Generator[AudioInterface, None, None]:
-    audio_path = None
+    audio = video.audio
+    if not audio:
+        yield AudioInterface(lambda: None, lambda: None, lambda: None)
+        return
+
+    soundarray = audio.to_soundarray()
+    bytes_io = io.BytesIO()
+    soundfile.write(
+        bytes_io,
+        soundarray,
+        samplerate=audio.fps,
+        format="wav"
+    )
+    bytes_io.seek(0)
+
+    mixer.init()
+    mixer.music.load(bytes_io, namehint="wav")
+
     try:
-        audio = video.audio
-        if not audio:
-            yield AudioInterface(lambda: None, lambda: None, lambda: None)
-        else:
-            audio_fd, audio_path = mkstemp(suffix=".mp3")
-            os.close(audio_fd)
-            audio.write_audiofile(audio_path)
-
-            mixer.init()
-            mixer.music.load(audio_path)
-
-            yield AudioInterface(
-                play=mixer.music.play,
-                pause=mixer.music.pause,
-                unpause=mixer.music.unpause,
-            )
+        yield AudioInterface(
+            play=mixer.music.play,
+            pause=mixer.music.pause,
+            unpause=mixer.music.unpause,
+        )
     finally:
         mixer.music.unload()
         mixer.quit()
-        if audio_path:
-            os.remove(audio_path)
 
 
 def calculate_target_resolution(path: str) -> TargetResolution:
@@ -191,26 +195,21 @@ def calculate_target_resolution(path: str) -> TargetResolution:
         return terminal_height, None
 
 
-class DummyVideo:
-    def close(self) -> None:
-        pass
-
-
 @contextmanager
 def load_video(
     path: str,
     frame_rate: Optional[int] = None,
     target_resolution: Optional[TargetResolution] = None,
 ) -> Generator[VideoFileClip, None, None]:
-    video = DummyVideo()
+    video = VideoFileClip(
+        path,
+        target_resolution=target_resolution,
+        resize_algorithm="fast_bilinear",
+    )
+    if frame_rate is not None:
+        video = video.set_fps(frame_rate)
+
     try:
-        video = VideoFileClip(
-            path,
-            target_resolution=target_resolution,
-            resize_algorithm="fast_bilinear",
-        )
-        if frame_rate is not None:
-            video = video.set_fps(frame_rate)
         yield video
     finally:
         video.close()
