@@ -228,6 +228,7 @@ def load_video(
     path: str,
     frame_rate: Optional[int] = None,
     target_resolution: Optional[TargetResolution] = None,
+    mute: bool = False
 ) -> Generator[VideoFileClip, None, None]:
     video = VideoFileClip(
         path,
@@ -236,6 +237,8 @@ def load_video(
     )
     if frame_rate is not None:
         video = video.set_fps(frame_rate)
+    if mute:
+        video = video.without_audio()
 
     try:
         yield video
@@ -247,10 +250,11 @@ def play_video(
     path: str,
     frame_rate: Optional[int],
     enable_keyboard: bool = True,
+    mute: bool = False
 ) -> None:
     target_resolution = calculate_target_resolution(path)
     with load_video(
-        path, frame_rate=frame_rate, target_resolution=target_resolution
+        path, frame_rate=frame_rate, target_resolution=target_resolution, mute=mute
     ) as video, load_audio(video) as audio_interface:
         offset = calculate_offset(video)
         Player(
@@ -274,12 +278,14 @@ def main() -> None:
         help=f"default {default_frame_rate}",
     )
     parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
+    parser.add_argument("-m", "--mute", action="store_true", help="disable audio")
     arguments = parser.parse_args()
 
     play_video(
         arguments.path,
         frame_rate=arguments.frame_rate,
         enable_keyboard=not arguments.disable_keyboard,
+        mute=arguments.mute,
     )
 
 
