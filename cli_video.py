@@ -12,6 +12,11 @@ from pygame import mixer
 import soundfile
 
 
+DEFAULT_FRAME_RATE = 24
+DEFAULT_VOLUME = 0.7
+VOLUME_INCREMENT = 0.1
+
+
 # For ANSI escape sequences to be processed correctly on windows
 os.system("")
 
@@ -29,17 +34,11 @@ AudioFunc = Callable[[], None]
 TargetResolution = Tuple[Optional[int], Optional[int]]
 
 
-def max_video_size() -> Tuple[int, int]:
-    height = os.get_terminal_size().lines - 1
-    width = os.get_terminal_size().columns // 2
-    return height, width
-
-
 def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def convert_frame(frame: Frame, offset: Tuple[int, int]) -> str:
+def to_printable_frame(frame: Frame, offset: Tuple[int, int]) -> str:
     vertical_offset = "\n" * offset[0]
     horizontal_offset = " " * offset[1]
 
@@ -53,8 +52,14 @@ def convert_frame(frame: Frame, offset: Tuple[int, int]) -> str:
     return "".join(output)
 
 
+def terminal_pixel_size() -> Tuple[int, int]:
+    height = os.get_terminal_size().lines - 1
+    width = os.get_terminal_size().columns // 2
+    return height, width
+
+
 def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
-    terminal_height, terminal_width = max_video_size()
+    terminal_height, terminal_width = terminal_pixel_size()
 
     if terminal_height > video.h:
         vertical_offset = (terminal_height - video.h) // 2
@@ -64,8 +69,9 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     return 0, horisontal_offset
 
 
+
 @contextmanager
-def hidden_cursor():
+def hidden_cursor() -> Generator[None, None, None]:
     print(ANSI_HIDE_CURSOR, end="")
     try:
         yield
@@ -91,8 +97,7 @@ class Player:
         enable_keyboard: bool,
     ) -> None:
         self.video = video
-        self.frame_rate = video.fps
-        self.frame_time_s = 1 / self.frame_rate
+        self.frame_time_s = 1 / self.video.fps
         self.offset = offset
         self.audio_interface = audio_interface
         self.enable_keyboard = enable_keyboard
@@ -129,7 +134,7 @@ class Player:
 
     def calculate_correction_s(self, frame_index: int) -> float:
         elapsed_time = time() - self.start_time
-        theoretical_elapsed_time = frame_index / self.frame_rate
+        theoretical_elapsed_time = frame_index / self.video.fps
         return theoretical_elapsed_time - elapsed_time
 
     def frame_sleep(self, correction_s: float) -> None:
@@ -153,12 +158,12 @@ class Player:
                 correction_s = self.calculate_correction_s(frame_index=i)
                 if correction_s + self.frame_time_s < 0:
                     continue
-                printable_frame = convert_frame(frame, offset=self.offset)
+                printable_frame = to_printable_frame(frame, offset=self.offset)
                 print(printable_frame, end="")
                 self.frame_sleep(correction_s)
 
 
-def convert_audio_to_bytes_io(audio: AudioFileClip) -> BytesIO:
+def audio_to_wav(audio: AudioFileClip) -> BytesIO:
     soundarray = audio.to_soundarray()
     bytes_io = BytesIO()
     soundfile.write(
@@ -181,21 +186,17 @@ def load_audio(
         return
 
     mixer.init()
-    bytes_io = convert_audio_to_bytes_io(audio)
-    mixer.music.load(bytes_io, namehint="wav")
-
-    volume_increment = 0.1
-    default_volume = 0.7
-    mixer.music.set_volume(default_volume)
+    mixer.music.load(audio_to_wav(audio), namehint="wav")
+    mixer.music.set_volume(DEFAULT_VOLUME)
 
     def raise_volume() -> None:
-        proposed_volume = mixer.music.get_volume() + volume_increment
+        proposed_volume = mixer.music.get_volume() + VOLUME_INCREMENT
         max_volume = 1.0
         new_volume = min(proposed_volume, max_volume)
         mixer.music.set_volume(new_volume)
 
     def lower_volume() -> None:
-        proposed_volume = mixer.music.get_volume() - volume_increment
+        proposed_volume = mixer.music.get_volume() - VOLUME_INCREMENT
         min_volume = 0.0
         new_volume = max(proposed_volume, min_volume)
         mixer.music.set_volume(new_volume)
@@ -214,7 +215,7 @@ def load_audio(
 
 
 def calculate_target_resolution(path: str) -> TargetResolution:
-    terminal_height, terminal_width = max_video_size()
+    terminal_height, terminal_width = terminal_pixel_size()
     terminal_aspect_ratio = terminal_width / terminal_height
 
     with load_video(path) as video:
@@ -266,16 +267,14 @@ def play_video(
 
 
 def main() -> None:
-    default_frame_rate = 24
-
     parser = ArgumentParser()
     parser.add_argument("path", help="path to video file")
     parser.add_argument(
         "-f",
         "--frame-rate",
         type=int,
-        default=default_frame_rate,
-        help=f"default {default_frame_rate}",
+        default=DEFAULT_FRAME_RATE,
+        help=f"default {DEFAULT_FRAME_RATE}",
     )
     parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
     parser.add_argument("-m", "--mute", action="store_true", help="disable audio")
