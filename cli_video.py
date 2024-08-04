@@ -179,6 +179,7 @@ def audio_to_wav(audio: AudioFileClip) -> BytesIO:
 @contextmanager
 def load_audio(
     video: VideoFileClip,
+    volume: Optional[float],
 ) -> Generator[AudioInterface, None, None]:
     audio = video.audio
     if not audio:
@@ -187,7 +188,7 @@ def load_audio(
 
     mixer.init()
     mixer.music.load(audio_to_wav(audio), namehint="wav")
-    mixer.music.set_volume(DEFAULT_VOLUME)
+    mixer.music.set_volume(volume if volume is not None else DEFAULT_VOLUME)
 
     def raise_volume() -> None:
         proposed_volume = mixer.music.get_volume() + VOLUME_INCREMENT
@@ -250,13 +251,14 @@ def load_video(
 def play_video(
     path: str,
     frame_rate: Optional[int],
+    volume: Optional[float],
+    mute: bool = False,
     enable_keyboard: bool = True,
-    mute: bool = False
 ) -> None:
     target_resolution = calculate_target_resolution(path)
     with load_video(
         path, frame_rate=frame_rate, target_resolution=target_resolution, mute=mute
-    ) as video, load_audio(video) as audio_interface:
+    ) as video, load_audio(video, volume=volume) as audio_interface:
         offset = calculate_offset(video)
         Player(
             video=video,
@@ -276,15 +278,23 @@ def main() -> None:
         default=DEFAULT_FRAME_RATE,
         help=f"default {DEFAULT_FRAME_RATE}",
     )
-    parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
+    parser.add_argument(
+        "-v",
+        "--volume",
+        type=float,
+        default=DEFAULT_VOLUME,
+        help=f"between 0.0 and 1.0, default {DEFAULT_VOLUME}",
+    )
     parser.add_argument("-m", "--mute", action="store_true", help="disable audio")
+    parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
     arguments = parser.parse_args()
 
     play_video(
         arguments.path,
         frame_rate=arguments.frame_rate,
-        enable_keyboard=not arguments.disable_keyboard,
+        volume=arguments.volume,
         mute=arguments.mute,
+        enable_keyboard=not arguments.disable_keyboard,
     )
 
 
