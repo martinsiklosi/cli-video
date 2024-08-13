@@ -1,6 +1,6 @@
 import os
 from io import BytesIO
-from time import time, sleep
+from time import perf_counter, sleep
 from argparse import ArgumentParser
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -69,7 +69,6 @@ def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
     return 0, horisontal_offset
 
 
-
 @contextmanager
 def hidden_cursor() -> Generator[None, None, None]:
     print(ANSI_HIDE_CURSOR, end="")
@@ -125,15 +124,15 @@ class Player:
         if self.is_paused:
             assert isinstance(self.pause_time, float)
             self.audio_interface.unpause()
-            self.start_time += time() - self.pause_time
+            self.start_time += perf_counter() - self.pause_time
             self.pause_time = None
         else:
             self.audio_interface.pause()
-            self.pause_time = time()
+            self.pause_time = perf_counter()
         self.is_paused = not self.is_paused
 
     def calculate_correction_s(self, frame_index: int) -> float:
-        elapsed_time = time() - self.start_time
+        elapsed_time = perf_counter() - self.start_time
         theoretical_elapsed_time = frame_index / self.video.fps
         return theoretical_elapsed_time - elapsed_time
 
@@ -149,7 +148,7 @@ class Player:
             sleep(self.check_paused_time_s)
 
     def play(self) -> None:
-        self.start_time = time()
+        self.start_time = perf_counter()
         self.audio_interface.play()
         print(ANSI_CLEAR_TERMINAL)
         with hidden_cursor():
