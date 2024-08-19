@@ -119,6 +119,7 @@ class Player:
                     self.audio_interface.raise_volume()
                 case keyboard.Key.down:
                     self.audio_interface.lower_volume()
+
         keyboard.Listener(on_press=on_press).start()
 
     def toggle_pause(self) -> None:
@@ -166,12 +167,7 @@ class Player:
 def audio_to_wav(audio: AudioFileClip) -> BytesIO:
     soundarray = audio.to_soundarray()
     bytes_io = BytesIO()
-    soundfile.write(
-        bytes_io,
-        soundarray,
-        samplerate=audio.fps,
-        format="wav"
-    )
+    soundfile.write(bytes_io, soundarray, samplerate=audio.fps, format="wav")
     bytes_io.seek(0)
     return bytes_io
 
@@ -208,7 +204,7 @@ def load_audio(
             pause=mixer.music.pause,
             unpause=mixer.music.unpause,
             raise_volume=raise_volume,
-            lower_volume=lower_volume
+            lower_volume=lower_volume,
         )
     finally:
         mixer.music.unload()
@@ -230,7 +226,7 @@ def load_video(
     path: str,
     frame_rate: int | None = None,
     target_resolution: TargetResolution | None = None,
-    mute: bool = False
+    mute: bool = False,
 ) -> Generator[VideoFileClip, None, None]:
     video = VideoFileClip(
         path,
@@ -256,9 +252,10 @@ def play_video(
     enable_keyboard: bool = True,
 ) -> None:
     target_resolution = calculate_target_resolution(path)
-    with load_video(
-        path, frame_rate=frame_rate, target_resolution=target_resolution, mute=mute
-    ) as video, load_audio(video, volume=volume) as audio_interface:
+    with (
+        load_video(path, frame_rate, target_resolution, mute) as video,
+        load_audio(video, volume) as audio_interface,
+    ):
         offset = calculate_offset(video)
         Player(
             video=video,
@@ -286,7 +283,12 @@ def main() -> None:
         help=f"between 0.0 and 1.0, default {DEFAULT_VOLUME}",
     )
     parser.add_argument("-m", "--mute", action="store_true", help="disable audio")
-    parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
+    parser.add_argument(
+        "-d",
+        "--disable-keyboard",
+        action="store_true",
+        help="disable keyboard controls",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.path):
