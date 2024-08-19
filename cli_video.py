@@ -1,10 +1,11 @@
 import os
 from io import BytesIO
-from time import perf_counter, sleep
 from argparse import ArgumentParser
+from shutil import get_terminal_size
+from time import perf_counter, sleep
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Tuple, Callable, Optional, List, Generator
+from collections.abc import Generator, Callable
 
 from moviepy.editor import AudioFileClip, VideoFileClip
 from pynput import keyboard
@@ -28,17 +29,17 @@ ANSI_SHOW_CURSOR = "\033[?25h"
 ANSI_CLEAR_TERMINAL = "\033[2J"
 
 
-Rgb = Tuple[int, int, int]
-Frame = List[List[Rgb]]
+Rgb = tuple[int, int, int]
+Frame = list[list[Rgb]]
 AudioFunc = Callable[[], None]
-TargetResolution = Tuple[Optional[int], Optional[int]]
+TargetResolution = tuple[int | None, int | None]
 
 
 def ansi_backround_rgb(rgb: Rgb) -> str:
     return f"\033[48;2;{rgb[0]};{rgb[1]};{rgb[2]}m"
 
 
-def to_printable_frame(frame: Frame, offset: Tuple[int, int]) -> str:
+def to_printable_frame(frame: Frame, offset: tuple[int, int]) -> str:
     vertical_offset = "\n" * offset[0]
     horizontal_offset = " " * offset[1]
 
@@ -52,13 +53,13 @@ def to_printable_frame(frame: Frame, offset: Tuple[int, int]) -> str:
     return "".join(output)
 
 
-def terminal_pixel_size() -> Tuple[int, int]:
-    height = os.get_terminal_size().lines - 1
-    width = os.get_terminal_size().columns // 2
+def terminal_pixel_size() -> tuple[int, int]:
+    height = get_terminal_size().lines - 1
+    width = get_terminal_size().columns // 2
     return height, width
 
 
-def calculate_offset(video: VideoFileClip) -> Tuple[int, int]:
+def calculate_offset(video: VideoFileClip) -> tuple[int, int]:
     terminal_height, terminal_width = terminal_pixel_size()
 
     if terminal_height > video.h:
@@ -92,7 +93,7 @@ class Player:
         self,
         video: VideoFileClip,
         audio_interface: AudioInterface,
-        offset: Tuple[int, int],
+        offset: tuple[int, int],
         enable_keyboard: bool,
     ) -> None:
         self.video = video
@@ -111,13 +112,13 @@ class Player:
             return
 
         def on_press(key) -> None:
-            if key == keyboard.Key.space:
-                self.toggle_pause()
-            if key == keyboard.Key.up:
-                self.audio_interface.raise_volume()
-            if key == keyboard.Key.down:
-                self.audio_interface.lower_volume()
-
+            match key:
+                case keyboard.Key.space:
+                    self.toggle_pause()
+                case keyboard.Key.up:
+                    self.audio_interface.raise_volume()
+                case keyboard.Key.down:
+                    self.audio_interface.lower_volume()
         keyboard.Listener(on_press=on_press).start()
 
     def toggle_pause(self) -> None:
@@ -178,7 +179,7 @@ def audio_to_wav(audio: AudioFileClip) -> BytesIO:
 @contextmanager
 def load_audio(
     video: VideoFileClip,
-    volume: Optional[float],
+    volume: float | None,
 ) -> Generator[AudioInterface, None, None]:
     audio = video.audio
     if not audio:
@@ -227,8 +228,8 @@ def calculate_target_resolution(path: str) -> TargetResolution:
 @contextmanager
 def load_video(
     path: str,
-    frame_rate: Optional[int] = None,
-    target_resolution: Optional[TargetResolution] = None,
+    frame_rate: int | None = None,
+    target_resolution: TargetResolution | None = None,
     mute: bool = False
 ) -> Generator[VideoFileClip, None, None]:
     video = VideoFileClip(
@@ -249,8 +250,8 @@ def load_video(
 
 def play_video(
     path: str,
-    frame_rate: Optional[int],
-    volume: Optional[float],
+    frame_rate: int | None,
+    volume: float | None,
     mute: bool = False,
     enable_keyboard: bool = True,
 ) -> None:

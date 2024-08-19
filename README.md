@@ -2,7 +2,12 @@
 
 ![demo](demo.png)
 
+## Requirements
+
+Requires python 3.10 or above.
+
 ## Install
+
 ```bash
 pip install -r requirements.txt
 ```
