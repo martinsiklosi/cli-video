@@ -287,14 +287,18 @@ def main() -> None:
     )
     parser.add_argument("-m", "--mute", action="store_true", help="disable audio")
     parser.add_argument("-d", "--disable-keyboard", action="store_true", help="disable keyboard controls")
-    arguments = parser.parse_args()
+    args = parser.parse_args()
+
+    if not os.path.exists(args.path):
+        print(f"ERROR: Path does not exist ({args.path}).")
+        exit(1)
 
     play_video(
-        arguments.path,
-        frame_rate=arguments.frame_rate,
-        volume=arguments.volume,
-        mute=arguments.mute,
-        enable_keyboard=not arguments.disable_keyboard,
+        args.path,
+        frame_rate=args.frame_rate,
+        volume=args.volume,
+        mute=args.mute,
+        enable_keyboard=not args.disable_keyboard,
     )
 
 
