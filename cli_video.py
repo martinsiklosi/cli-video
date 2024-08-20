@@ -164,6 +164,7 @@ class Player:
                 printable_frame = to_printable_frame(frame, offset=self.offset)
                 print(printable_frame, end="")
                 self.frame_sleep(correction_s)
+            print("")
 
 
 def audio_to_wav(audio: AudioFileClip) -> BytesIO:
