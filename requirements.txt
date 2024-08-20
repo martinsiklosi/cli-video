@@ -1,5 +1,4 @@
 pygame==2.6.0
-numpy==1.24.3
-moviepy==1.0.3
 pynput==1.7.7
 soundfile==0.12.1
+git+https://github.com/martinsiklosi/minimal-moviepy

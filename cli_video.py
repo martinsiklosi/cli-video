@@ -3,14 +3,16 @@ from io import BytesIO
 from argparse import ArgumentParser
 from shutil import get_terminal_size
 from time import perf_counter, sleep
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from collections.abc import Generator, Callable
+from contextlib import contextmanager, redirect_stdout
 
-from moviepy.editor import AudioFileClip, VideoFileClip
+from minimal_moviepy.editor import AudioFileClip, VideoFileClip
 from pynput import keyboard
-from pygame import mixer
 import soundfile
+
+with open(os.devnull, "w") as devnull, redirect_stdout(devnull):
+    from pygame import mixer
 
 
 DEFAULT_FRAME_RATE = 24
