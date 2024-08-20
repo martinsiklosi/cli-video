@@ -177,7 +177,7 @@ def audio_to_wav(audio: AudioFileClip) -> BytesIO:
 @contextmanager
 def load_audio(
     video: VideoFileClip,
-    volume: float | None,
+    volume: float = DEFAULT_VOLUME,
 ) -> Generator[AudioInterface, None, None]:
     audio = video.audio
     if not audio:
@@ -186,7 +186,7 @@ def load_audio(
 
     mixer.init()
     mixer.music.load(audio_to_wav(audio), namehint="wav")
-    mixer.music.set_volume(volume if volume is not None else DEFAULT_VOLUME)
+    mixer.music.set_volume(volume)
 
     def raise_volume() -> None:
         proposed_volume = mixer.music.get_volume() + VOLUME_INCREMENT
@@ -248,8 +248,8 @@ def load_video(
 
 def play_video(
     path: str,
-    frame_rate: int | None,
-    volume: float | None,
+    frame_rate: int | None = None,
+    volume: float = DEFAULT_VOLUME,
     mute: bool = False,
     enable_keyboard: bool = True,
 ) -> None:
